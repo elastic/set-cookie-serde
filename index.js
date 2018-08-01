@@ -7,14 +7,28 @@ function parsePair (segment) {
   return segment.trim().split('=')
 }
 
+function isNotEmpty (value) {
+  return value !== ''
+}
+
 class SetCookie {
   constructor (input, options) {
     if (Array.isArray(input)) {
       return input.map(item => new SetCookie(item, options))
     }
 
+    this.data = {}
+    this.meta = {
+      expires: undefined,
+      maxAge: undefined,
+      domain: undefined,
+      path: undefined,
+      secure: undefined,
+      httpOnly: undefined,
+      sameSite: undefined,
+    }
+
     options = options || {}
-    let data = null
 
     // Options
     this[decode] = options.decode || decodeURIComponent
@@ -22,33 +36,30 @@ class SetCookie {
 
     // Convert strings to objects
     if (typeof input === 'string') {
-      const segments = input.split(';').map(parsePair)
+      const segments = input.split(';')
       const pair = segments.shift()
 
-      if (pair.length < 2 || !pair[0] || !pair[1]) {
-        throw new Error('Invalid key-value pair')
+      // NOTE: `foo=bar`, `=bar` and `bar` are all valid forms.
+      // This way of parsing and getting key/value supports it.
+      const position = pair.indexOf('=')
+      const key = position >= 0 ? pair.slice(0, position) : ''
+      const value = pair.slice(position + 1)
+
+      if (!value) {
+        throw new Error('Invalid value')
       }
 
-      data = {
-        key: this[decode](pair[0]),
-        value: this[decode](pair[1]),
-        expires: undefined,
-        maxAge: undefined,
-        domain: undefined,
-        path: undefined,
-        secure: undefined,
-        httpOnly: undefined,
-        sameSite: undefined,
-      }
+      this.data = {}
+      this.data[this[decode](key)] = this[decode](value)
 
-      for (let pair of segments) {
+      for (let pair of segments.map(parsePair)) {
         switch (pair[0].toLowerCase()) {
           case 'expires':
             const expires = new Date(pair[1])
             if (isNaN(expires.getTime())) {
               throw new Error('Invalid Expires field')
             }
-            data.expires = expires
+            this.meta.expires = expires
             break
 
           case 'max-age':
@@ -56,102 +67,102 @@ class SetCookie {
             if (isNaN(maxAge)) {
               throw new Error('Invalid Max-Age field')
             }
-            data.maxAge = maxAge
+            this.meta.maxAge = maxAge
             break
 
           case 'domain':
             if (!pair[1]) {
               throw new Error('Invalid Domain field')
             }
-            data.domain = pair[1]
+            this.meta.domain = pair[1]
             break
 
           case 'path':
             if (!pair[1]) {
               throw new Error('Invalid Path field')
             }
-            data.path = pair[1]
+            this.meta.path = pair[1]
             break
 
           case 'secure':
             if (pair[1]) {
               throw new Error('Invalid Secure field')
             }
-            data.secure = true
+            this.meta.secure = true
             break
 
           case 'httponly':
             if (pair[1]) {
               throw new Error('Invalid HttpOnly field')
             }
-            data.httpOnly = true
+            this.meta.httpOnly = true
             break
 
           case 'samesite':
             if (!pair[1]) {
               throw new Error('Invalid SameSite field')
             }
-            data.sameSite = pair[1]
+            this.meta.sameSite = pair[1]
             break
         }
       }
 
     // Passthrough objects as-is
     } else if (typeof input === 'object') {
-      data = input
+      const data = input.data
+      const meta = input.meta
 
-      if (!data.key || typeof data.key !== 'string') {
-        throw new Error('Invalid key')
+      if (!data || !Object.keys(data).length) {
+        throw new Error('Missing data')
       }
-      if (!data.value || typeof data.value !== 'string') {
-        throw new Error('Invalid value')
-      }
+
+      Object.assign(this.data, data)
+      Object.assign(this.meta, meta)
     } else {
       throw new Error('Invalid input type')
     }
-
-    this.key = data.key
-    this.value = data.value
-    this.expires = data.expires
-    this.maxAge = data.maxAge
-    this.domain = data.domain
-    this.path = data.path
-    this.secure = data.secure
-    this.httpOnly = data.httpOnly
-    this.sameSite = data.sameSite
   }
 
   toString () {
-    const pairs = [
-      `${this[encode](this.key)}=${this[encode](this.value)}`
-    ]
-
-    if (typeof this.expires !== 'undefined') {
-      pairs.push(`Expires=${this.expires.toUTCString()}`)
+    const pairs = []
+    
+    for (let key of Object.keys(this.data)) {
+      const pair = [
+        this[encode](this.data[key])
+      ]
+      if (key) {
+        pair.unshift('=')
+        pair.unshift(this[encode](key))
+      }
+      pairs.push(pair.join(''))
     }
 
-    if (typeof this.maxAge !== 'undefined') {
-      pairs.push(`Max-Age=${this.maxAge}`)
+    if (typeof this.meta.expires !== 'undefined') {
+      pairs.push(`Expires=${this.meta.expires.toUTCString()}`)
     }
 
-    if (typeof this.domain !== 'undefined') {
-      pairs.push(`Domain=${this.domain}`)
+    if (typeof this.meta.maxAge !== 'undefined') {
+      pairs.push(`Max-Age=${this.meta.maxAge}`)
     }
 
-    if (typeof this.path !== 'undefined') {
-      pairs.push(`Path=${this.path}`)
+    if (typeof this.meta.domain !== 'undefined') {
+      pairs.push(`Domain=${this.meta.domain}`)
     }
 
-    if (typeof this.secure !== 'undefined') {
+    if (typeof this.meta.path !== 'undefined') {
+      pairs.push(`Path=${this.meta.path}`)
+    }
+
+    if (typeof this.meta.secure !== 'undefined') {
       pairs.push('Secure')
     }
 
-    if (typeof this.httpOnly !== 'undefined') {
+    if (typeof this.meta.httpOnly !== 'undefined') {
       pairs.push('HttpOnly')
     }
 
-    if (typeof this.sameSite !== 'undefined') {
-      pairs.push(`SameSite=${this.sameSite}`)
+    if (typeof this.meta.sameSite !== 'undefined') {
+      pairs.push(`SameSite=${this.meta.sameSite}`)
     }
 
     return pairs.join('; ')

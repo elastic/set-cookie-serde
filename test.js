@@ -11,11 +11,16 @@ function datesMatch (a, b) {
 }
 
 function compare (t, cookie, data) {
-  for (let key of Object.keys(cookie)) {
-    if (key === 'expires' && typeof data.expires !== 'undefined') {
-      t.ok(datesMatch(cookie[key], data[key]), `${key} date matches`)
+  for (let key of Object.keys(cookie.data)) {
+    t.equal(cookie.data[key], data.data[key], `${key} is ${data.data[key]}`)
+  }
+
+  const meta = data.meta || {}
+  for (let key of Object.keys(cookie.meta)) {
+    if (key === 'expires' && typeof meta.expires !== 'undefined') {
+      t.ok(datesMatch(cookie.meta[key], meta[key]), `${key} date matches`)
     } else {
-      t.equal(cookie[key], data[key], `${key} is ${data[key]}`)
+      t.equal(cookie.meta[key], meta[key], `${key} is ${meta[key]}`)
     }
   }
 }
@@ -56,47 +61,71 @@ const tests = [
     name: 'basic key/value pair',
     string: 'foo=bar',
     data: {
-      key: 'foo',
-      value: 'bar'
+      data: {
+        foo: 'bar'
+      },
+      meta: {}
+    }
+  },
+  {
+    name: 'blank key',
+    string: 'bar',
+    data: {
+      data: {
+        '': 'bar'
+      },
+      meta: {}
     }
   },
   {
     name: 'boolean directives',
     string: 'foo=bar; Secure; HttpOnly',
     data: {
-      key: 'foo',
-      value: 'bar',
-      secure: true,
-      httpOnly: true
+      data: {
+        foo: 'bar'
+      },
+      meta: {
+        secure: true,
+        httpOnly: true
+      }
     }
   },
   {
     name: 'number directives',
     string: 'foo=bar; Max-Age=100',
     data: {
-      key: 'foo',
-      value: 'bar',
-      maxAge: 100
+      data: {
+        foo: 'bar'
+      },
+      meta: {
+        maxAge: 100
+      }
     }
   },
   {
     name: 'string directives',
     string: 'foo=bar; Domain=example.com; Path=/; SameSite=Strict',
     data: {
-      key: 'foo',
-      value: 'bar',
-      domain: 'example.com',
-      path: '/',
-      sameSite: 'Strict'
+      data: {
+        foo: 'bar'
+      },
+      meta: {
+        domain: 'example.com',
+        path: '/',
+        sameSite: 'Strict'
+      }
     }
   },
   {
     name: 'date directives',
     string: 'foo=bar; Expires=Wed, 21 Oct 2015 07:28:00 GMT',
     data: {
-      key: 'foo',
-      value: 'bar',
-      expires: new Date('Wed, 21 Oct 2015 07:28:00 GMT')
+      data: {
+        foo: 'bar'
+      },
+      meta: {
+        expires: new Date('Wed, 21 Oct 2015 07:28:00 GMT')
+      }
     }
   }
 ]
@@ -114,14 +143,16 @@ tap.test('arrays', t => {
 
   t.comment('first item')
   compare(t, cookies[0], {
-    key: 'foo',
-    value: 'bar'
+    data: {
+      foo: 'bar'
+    }
   })
 
   t.comment('second item')
   compare(t, cookies[1], {
-    key: 'baz',
-    value: 'buz'
+    data: {
+      baz: 'buz'
+    }
   })
 
   t.end()
@@ -135,38 +166,26 @@ tap.test('validation', t => {
   )
 
   t.throws(
-    () => new SetCookie({ value: 'bar' }),
-    /^Invalid key$/,
-    'invalid key'
-  )
-
-  t.throws(
-    () => new SetCookie({ key: 'foo' }),
-    /^Invalid value$/,
-    'invalid value'
+    () => new SetCookie({}),
+    /^Missing data$/,
+    'missing data'
   )
 
   t.throws(
     () => new SetCookie(''),
-    /^Invalid key-value pair$/,
+    /^Invalid value$/,
     'empty key-value string'
   )
 
   t.throws(
     () => new SetCookie('='),
-    /^Invalid key-value pair$/,
+    /^Invalid value$/,
     'empty key and value'
   )
 
   t.throws(
-    () => new SetCookie('=bar'),
-    /^Invalid key-value pair$/,
-    'empty key'
-  )
-
-  t.throws(
     () => new SetCookie('foo='),
-    /^Invalid key-value pair$/,
+    /^Invalid value$/,
     'empty value'
   )
 
